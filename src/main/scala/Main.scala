@@ -5,7 +5,6 @@ import cats.effect.IO
 import cats.effect.IOApp
 import cats.effect.kernel.Resource
 import cats.syntax.either.catsSyntaxEitherId
-import com.comcast.ip4s.Host
 import com.comcast.ip4s.Port
 import fs2.Stream
 import fs2.data.csv.CsvException
@@ -23,17 +22,21 @@ import org.http4s.Status
 import org.http4s.Uri
 import org.http4s.circe._
 import org.http4s.client.Client
+import org.http4s.client.defaults.RequestTimeout
 import org.http4s.dsl.Http4sDsl
 import org.http4s.dsl.impl.OptionalMultiQueryParamDecoderMatcher
 import org.http4s.ember.client.EmberClientBuilder
 import org.http4s.ember.server.EmberServerBuilder
+import pureconfig._
+import pureconfig.generic.derivation.default._
+import pureconfig.module.http4s._
 
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
+import scala.concurrent.duration.Duration
 
 import concurrent.duration.DurationInt
-
 case class SpeechRep(
     Redner: String,
     Thema: String,
@@ -200,7 +203,14 @@ class Downloader(client: Client[IO]) extends GenericDownloader {
     )
 }
 
+object WithOpt {
+  extension [O, F](obj: O)
+    def withOpt(optValue: Option[F], setField: (O, F) => O): O =
+      optValue.map(setField(obj, _)).getOrElse(obj)
+}
+
 object Server {
+  import WithOpt._
   given Encoder[Evaluation] = deriveEncoder
   val dsl = new Http4sDsl[IO] {}
   import dsl._
@@ -225,24 +235,40 @@ object Server {
             }
       }
   }
-  def run: Resource[IO, Unit] =
+  def run(http4sConfig: Http4sConfig): Resource[IO, Unit] = {
+    val serverConfig = http4sConfig.server
+    val clientConfig = http4sConfig.client
+    val clientBuilder = EmberClientBuilder
+      .default[IO]
+      .withOpt(clientConfig.timeout, _.withTimeout(_))
+      .withOpt(clientConfig.idleConnectionTime, _.withIdleConnectionTime(_))
+    val serverBuilder = EmberServerBuilder
+      .default[IO]
+      .withHost(serverConfig.host.toIpAddress.get)
+      .withPort(Port.fromInt(serverConfig.port).get)
     for {
-      client <- EmberClientBuilder
-        .default[IO]
-        .withTimeout(30.seconds)
-        .build
-      _ <- EmberServerBuilder
-        .default[IO]
-        .withHost(Host.fromString("0.0.0.0").get)
-        .withPort(Port.fromInt(8080).get)
+      client <- clientBuilder.build
+      _ <- serverBuilder
         .withHttpApp(
           HttpRoutes.of[IO](routes(new Downloader(client))).orNotFound
         )
         .build
     } yield ()
+  }
 }
 
+case class ServerConfig(host: Uri.Host, port: Int) derives ConfigReader
+case class ClientConfig(
+    timeout: Option[Duration],
+    idleConnectionTime: Option[Duration]
+) derives ConfigReader
+case class Http4sConfig(server: ServerConfig, client: ClientConfig)
+    derives ConfigReader
+
 object Main extends IOApp {
-  override def run(args: List[String]): IO[ExitCode] =
-    Server.run.useForever &> IO(ExitCode.Success)
+  override def run(args: List[String]): IO[ExitCode] = {
+    val config = ConfigSource.default
+    val http4sConfig = config.at("http4s").loadOrThrow[Http4sConfig]
+    Server.run(http4sConfig).useForever &> IO(ExitCode.Success)
+  }
 }
