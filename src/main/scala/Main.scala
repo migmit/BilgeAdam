@@ -4,7 +4,9 @@ import cats.effect.IO
 import cats.effect.IOApp
 import cats.syntax.either.catsSyntaxEitherId
 import fs2.Stream
+import fs2.data.csv.CsvException
 import fs2.data.csv.CsvRowDecoder
+import fs2.data.csv.DecoderError
 import fs2.data.csv.ParseableHeader
 import fs2.data.csv.decodeUsingHeaders
 import fs2.data.csv.generic.semiauto._
@@ -13,16 +15,16 @@ import io.circe.generic.semiauto._
 import io.circe.syntax._
 import org.http4s.Request
 import org.http4s.Uri
+import org.http4s.client.Client
 import org.http4s.ember.client.EmberClientBuilder
 
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 import java.util.Calendar
 import java.util.Date
 
 import concurrent.duration.DurationInt
-
-val url = "https://fid-recruiting.s3-eu-west-1.amazonaws.com/politics.csv"
 
 case class SpeechRep(
     Redner: String,
@@ -57,6 +59,11 @@ case class SpeechStats(
     speechesOnSecurity = (if (speech.subject == SpeechStats.securitySubject) 1
                           else 0) + speechesOnSecurity,
     wordsTotal = wordsTotal + speech.wordCount
+  )
+  def combine(other: SpeechStats): SpeechStats = SpeechStats(
+    speechesIn2013 = speechesIn2013 + other.speechesIn2013,
+    speechesOnSecurity = speechesOnSecurity + other.speechesOnSecurity,
+    wordsTotal = wordsTotal + other.wordsTotal
   )
 }
 object SpeechStats {
@@ -117,32 +124,87 @@ object Evaluation {
     stats.foldLeft(EvaluationHelper.initial)(_.update(_)).toEvaluation
 }
 
+class DownloadException extends Exception
+
+trait GenericDownloader {
+  def getContent(url: String): Stream[IO, String]
+
+  given CsvRowDecoder[SpeechRep, String] = deriveCsvRowDecoder
+  given ParseableHeader[String] = ParseableHeader.instance(_.trim().asRight)
+
+  def handleUrl(url: String): Stream[IO, Map[String, SpeechStats]] =
+    getContent(url)
+      .through(decodeUsingHeaders[SpeechRep]())
+      .map(Speech.fromRep)
+      .handleErrorWith(_ match {
+        case (e: DownloadException) =>
+          Stream.raiseError[IO](
+            new Exception(s"Download error ($url): ${e.getMessage()}")
+          )
+        case (e: CsvException) =>
+          Stream
+            .raiseError[IO](
+              new Exception(s"Decode error ($url): ${e.getMessage()}")
+            )
+        case (e: NumberFormatException) =>
+          Stream.raiseError[IO](
+            new Exception(s"Number parsing error ($url): ${e.getMessage()}")
+          )
+        case (e: DateTimeParseException) =>
+          Stream.raiseError[IO](
+            new Exception(s"Date parsing error ($url): ${e.getMessage()}")
+          )
+        case e =>
+          Stream.raiseError[IO](
+            new Exception(s"Unexpected error ($url): ${e.getMessage()}")
+          )
+      })
+      .fold[Map[String, SpeechStats]](Map.empty)((stats, speech) =>
+        stats.updated(
+          speech.politician,
+          stats
+            .getOrElse(speech.politician, SpeechStats.initial)
+            .update(speech)
+        )
+      )
+}
+
+class Downloader(client: Client[IO]) extends GenericDownloader {
+  def getContent(url: String): Stream[IO, String] = client
+    .stream(Request(uri = Uri.fromString(url).toOption.get))
+    .flatMap(response =>
+      if (response.status.isSuccess) response.bodyText
+      else Stream.raiseError[IO](new DownloadException)
+    )
+}
+
 object Main extends IOApp {
-  implicit val speechDec: CsvRowDecoder[SpeechRep, String] = deriveCsvRowDecoder
-  implicit val evaluationEnc: Encoder[Evaluation] = deriveEncoder
+  given Encoder[Evaluation] = deriveEncoder
+  def merge(
+      stats1: Map[String, SpeechStats],
+      stats2: Map[String, SpeechStats]
+  ): Map[String, SpeechStats] =
+    stats1 ++ stats2.map((name, stats) =>
+      (
+        name,
+        stats1.get(name) match {
+          case None     => stats
+          case Some(st) => stats.combine(st)
+        }
+      )
+    )
   override def run(args: List[String]): IO[ExitCode] = for {
     stats <- EmberClientBuilder
       .default[IO]
       .withTimeout(30.seconds)
       .build
       .use { client =>
-        implicit val parseableHeader: ParseableHeader[String] =
-          ParseableHeader.instance(_.trim().asRight)
-        client
-          .stream(Request(uri = Uri.fromString(url).toOption.get))
-          .flatMap(_.bodyText)
-          .through(decodeUsingHeaders[SpeechRep]())
-          .map(Speech.fromRep)
-          .fold[Map[String, SpeechStats]](Map.empty)((stats, speech) =>
-            stats.updated(
-              speech.politician,
-              stats
-                .getOrElse(speech.politician, SpeechStats.initial)
-                .update(speech)
-            )
-          )
+        val downloader = new Downloader(client)
+        Stream
+          .emits(args)
+          .flatMap(downloader.handleUrl)
           .compile
-          .lastOrError
+          .fold(Map.empty)(merge)
       }
     _ <- IO.println(Evaluation.fromStats(stats).asJson)
   } yield ExitCode.Success
