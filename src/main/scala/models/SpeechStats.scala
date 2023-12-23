@@ -1,6 +1,6 @@
 package models
 
-import cats.kernel.Monoid
+import cats.kernel.CommutativeMonoid
 import cats.syntax.monoid.catsSyntaxSemigroup
 
 /** Data we need to track for any specific politician
@@ -37,7 +37,7 @@ object SpeechStats {
 
   /** Subject to pay attention to */
   val securitySubject = "Innere Sicherheit"
-  given Monoid[SpeechStats] = new Monoid[SpeechStats] {
+  given CommutativeMonoid[SpeechStats] = new CommutativeMonoid[SpeechStats] {
     override def combine(x: SpeechStats, y: SpeechStats): SpeechStats =
       SpeechStats(
         speechesIn2013 = x.speechesIn2013 + y.speechesIn2013,
@@ -56,8 +56,8 @@ object SpeechStats {
   */
 final case class SpeechStatsMap(allStats: Map[String, SpeechStats])
 object SpeechStatsMap {
-  given Monoid[SpeechStatsMap] =
-    new Monoid[SpeechStatsMap] {
+  given CommutativeMonoid[SpeechStatsMap] =
+    new CommutativeMonoid[SpeechStatsMap] {
       override def combine(
           x: SpeechStatsMap,
           y: SpeechStatsMap

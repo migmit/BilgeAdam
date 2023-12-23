@@ -4,16 +4,14 @@ import cats.effect.IO
 import cats.effect.kernel.Resource
 import com.comcast.ip4s.Port
 import config.Http4sConfig
-import fs2.Stream
-import io.circe.syntax.EncoderOps
+import logic.Combiner
 import logic.Downloader
-import logic.GenericDownloader
-import models.Evaluation
+import org.http4s.EntityEncoder.stringEncoder
 import org.http4s.HttpRoutes
 import org.http4s.Request
 import org.http4s.Response
 import org.http4s.Status
-import org.http4s.circe._
+import org.http4s.circe.CirceEntityEncoder.circeEntityEncoder
 import org.http4s.dsl.Http4sDsl
 import org.http4s.ember.client.EmberClientBuilder
 import org.http4s.ember.server.EmberServerBuilder
@@ -31,27 +29,22 @@ object Server {
 
   /** Server API
     *
-    * @param downloader
-    *   a way to process one URL
+    * @param combiner
+    *   business logic, processing URLs
     */
   def routes(
-      downloader: GenericDownloader
+      combiner: Combiner
   ): PartialFunction[Request[IO], IO[Response[IO]]] = {
     case GET -> Root / "evaluation" :? URLsMatcher(vurls) =>
       vurls match {
         case Invalid(e) => IO(Response(Status.BadRequest))
         case Valid(urls) =>
-          Stream
-            .emits(urls)
-            .flatMap(downloader.handleUrl)
-            .compile
-            .foldMonoid
+          combiner
+            .combine(urls)
             .attempt
             .flatMap {
-              case Right(statsMap) =>
-                Status.Ok(Evaluation.fromStats(statsMap).asJson)
-              case Left(e) =>
-                Status.InternalServerError(e.getMessage())
+              case Right(result) => Status.Ok(result)
+              case Left(e)       => Status.InternalServerError(e.getMessage())
             }
       }
   }
@@ -76,8 +69,9 @@ object Server {
       .withPort(Port.fromInt(serverConfig.port).get)
     for {
       client <- clientBuilder.build
+      combiner = new Combiner(new Downloader(client))
       _ <- serverBuilder
-        .withHttpApp(HttpRoutes.of(routes(new Downloader(client))).orNotFound)
+        .withHttpApp(HttpRoutes.of(routes(combiner)).orNotFound)
         .build
     } yield ()
   }

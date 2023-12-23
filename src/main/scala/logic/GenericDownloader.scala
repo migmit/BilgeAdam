@@ -36,9 +36,9 @@ trait GenericDownloader {
     * @param url
     *   URL to resolve
     * @return
-    *   one-element stream with collected data on each politician
+    *   collected data on each politician
     */
-  def handleUrl(url: String): Stream[IO, SpeechStatsMap] =
+  def handleUrl(url: String): IO[SpeechStatsMap] =
     getContent(url)
       .through(decodeUsingHeaders[SpeechRep]())
       .map(Speech.fromRep)
@@ -65,6 +65,7 @@ trait GenericDownloader {
             new Exception(s"Unexpected error ($url): ${e.getMessage()}")
           )
       })
+      .compile
       .fold[Map[String, SpeechStats]](Map.empty)((allStats, speech) =>
         allStats.updated(
           speech.politician,
