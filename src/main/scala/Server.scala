@@ -7,6 +7,7 @@ import config.Http4sConfig
 import fs2.Stream
 import io.circe.syntax.EncoderOps
 import logic.Downloader
+import logic.GenericDownloader
 import models.Evaluation
 import org.http4s.HttpRoutes
 import org.http4s.Request
@@ -17,14 +18,24 @@ import org.http4s.dsl.Http4sDsl
 import org.http4s.ember.client.EmberClientBuilder
 import org.http4s.ember.server.EmberServerBuilder
 
+/** HTTP server
+  */
 object Server {
   import utils.WithOpt._
   val dsl = new Http4sDsl[IO] {}
   import dsl._
+
+  /** Match multiple URLs in the query */
   object URLsMatcher
       extends OptionalMultiQueryParamDecoderMatcher[String]("url")
+
+  /** Server API
+    *
+    * @param downloader
+    *   a way to process one URL
+    */
   def routes(
-      downloader: Downloader
+      downloader: GenericDownloader
   ): PartialFunction[Request[IO], IO[Response[IO]]] = {
     case GET -> Root / "evaluation" :? URLsMatcher(vurls) =>
       vurls match {
@@ -44,6 +55,14 @@ object Server {
             }
       }
   }
+
+  /** Start the server
+    *
+    * @param http4sConfig
+    *   configuration for http4s resources
+    * @return
+    *   server resource
+    */
   def run(http4sConfig: Http4sConfig): Resource[IO, Unit] = {
     val serverConfig = http4sConfig.server
     val clientConfig = http4sConfig.client

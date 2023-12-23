@@ -15,11 +15,29 @@ import models.SpeechStatsMap
 
 import java.time.format.DateTimeParseException
 
+/** Common interface for resolving URLs, downloading CSVs and collecting data on
+  * politicians
+  */
 trait GenericDownloader {
+
+  /** Resolve a URL, producing the text stream
+    *
+    * @param url
+    *   URL to resolve
+    * @return
+    *   text stream
+    */
   def getContent(url: String): Stream[IO, String]
 
   given ParseableHeader[String] = ParseableHeader.instance(_.trim().asRight)
 
+  /** Resolve a URL, parse CSV and collect data on politicians
+    *
+    * @param url
+    *   URL to resolve
+    * @return
+    *   one-element stream with collected data on each politician
+    */
   def handleUrl(url: String): Stream[IO, SpeechStatsMap] =
     getContent(url)
       .through(decodeUsingHeaders[SpeechRep]())
