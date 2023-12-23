@@ -1,16 +1,15 @@
-import EvaluationHelper.updateOneStat
 import cats.data.Validated.Invalid
 import cats.data.Validated.Valid
 import cats.effect.ExitCode
 import cats.effect.IO
 import cats.effect.IOApp
+import cats.effect.kernel.Resource
 import cats.syntax.either.catsSyntaxEitherId
 import com.comcast.ip4s.Host
 import com.comcast.ip4s.Port
 import fs2.Stream
 import fs2.data.csv.CsvException
 import fs2.data.csv.CsvRowDecoder
-import fs2.data.csv.DecoderError
 import fs2.data.csv.ParseableHeader
 import fs2.data.csv.decodeUsingHeaders
 import fs2.data.csv.generic.semiauto._
@@ -26,16 +25,12 @@ import org.http4s.circe._
 import org.http4s.client.Client
 import org.http4s.dsl.Http4sDsl
 import org.http4s.dsl.impl.OptionalMultiQueryParamDecoderMatcher
-import org.http4s.dsl.impl.QueryParamDecoderMatcher
 import org.http4s.ember.client.EmberClientBuilder
 import org.http4s.ember.server.EmberServerBuilder
-import org.http4s.server.middleware.Logger
 
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
-import java.util.Calendar
-import java.util.Date
 
 import concurrent.duration.DurationInt
 
@@ -112,11 +107,11 @@ case class EvaluationHelper(
     val name = stats._1
     val stat = stats._2
     EvaluationHelper(
-      mostSpeeches2013 =
-        updateOneStat(mostSpeeches2013, name, stat.speechesIn2013, _ - _),
-      mostSecurity =
-        updateOneStat(mostSecurity, name, stat.speechesOnSecurity, _ - _),
-      leastWordy = updateOneStat(
+      mostSpeeches2013 = EvaluationHelper
+        .updateOneStat(mostSpeeches2013, name, stat.speechesIn2013, _ - _),
+      mostSecurity = EvaluationHelper
+        .updateOneStat(mostSecurity, name, stat.speechesOnSecurity, _ - _),
+      leastWordy = EvaluationHelper.updateOneStat(
         leastWordy,
         name,
         stat.wordsTotal,
@@ -218,36 +213,36 @@ object Server {
       vurls match {
         case Invalid(e) => IO(Response(Status.BadRequest))
         case Valid(urls) =>
-          for {
-            stats <- Stream
-              .emits(urls)
-              .flatMap(downloader.handleUrl)
-              .compile
-              .fold(Map.empty)(SpeechStats.merge)
-            result = Evaluation.fromStats(stats).asJson
-            response <- Status.Ok(result)
-          } yield response
+          Stream
+            .emits(urls)
+            .flatMap(downloader.handleUrl)
+            .compile
+            .fold(Map.empty)(SpeechStats.merge)
+            .attempt
+            .flatMap {
+              case Right(stats) => Status.Ok(Evaluation.fromStats(stats).asJson)
+              case Left(e)      => Status.InternalServerError(e.getMessage())
+            }
       }
   }
-  def run: IO[Nothing] =
-    EmberClientBuilder
-      .default[IO]
-      .withTimeout(30.seconds)
-      .build
-      .use(client =>
-        EmberServerBuilder
-          .default[IO]
-          .withHost(Host.fromString("0.0.0.0").get)
-          .withPort(Port.fromInt(8080).get)
-          .withHttpApp(
-            HttpRoutes.of[IO](routes(new Downloader(client))).orNotFound
-          )
-          .build
-          .useForever
-      )
+  def run: Resource[IO, Unit] =
+    for {
+      client <- EmberClientBuilder
+        .default[IO]
+        .withTimeout(30.seconds)
+        .build
+      _ <- EmberServerBuilder
+        .default[IO]
+        .withHost(Host.fromString("0.0.0.0").get)
+        .withPort(Port.fromInt(8080).get)
+        .withHttpApp(
+          HttpRoutes.of[IO](routes(new Downloader(client))).orNotFound
+        )
+        .build
+    } yield ()
 }
 
 object Main extends IOApp {
   override def run(args: List[String]): IO[ExitCode] =
-    Server.run &> IO(ExitCode.Success)
+    Server.run.useForever &> IO(ExitCode.Success)
 }
