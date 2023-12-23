@@ -24,5 +24,13 @@ lazy val root = project
       "org.scalameta" %% "munit" % "0.7.29" % Test,
       "ch.qos.logback" % "logback-classic" % "1.3.0"
     ) ++ http4sDeps ++ fs2DataDeps ++ circeDeps ++ pureconfigDeps,
-    Compile / run / fork := true
+    run / fork := true,
+    run / connectInput := true,
+    assemblyMergeStrategy := {
+      case PathList("META-INF", x, _*) if x.toLowerCase == "services" =>
+        MergeStrategy.filterDistinctLines
+      case PathList("META-INF", _*) => MergeStrategy.discard
+      case PathList("NOTICE", _*)   => MergeStrategy.discard
+      case _                        => MergeStrategy.deduplicate
+    }
   )

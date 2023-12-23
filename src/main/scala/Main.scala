@@ -16,6 +16,6 @@ object Main extends IOApp {
   override def run(args: List[String]): IO[ExitCode] = {
     val config = ConfigSource.default
     val http4sConfig = config.at("http4s").loadOrThrow[Http4sConfig]
-    Server.run(http4sConfig).useForever &> IO(ExitCode.Success)
+    Server.run(http4sConfig).use(_ => IO.readLine) >> IO(ExitCode.Success)
   }
 }
