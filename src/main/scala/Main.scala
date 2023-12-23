@@ -1,8 +1,12 @@
 import EvaluationHelper.updateOneStat
+import cats.data.Validated.Invalid
+import cats.data.Validated.Valid
 import cats.effect.ExitCode
 import cats.effect.IO
 import cats.effect.IOApp
 import cats.syntax.either.catsSyntaxEitherId
+import com.comcast.ip4s.Host
+import com.comcast.ip4s.Port
 import fs2.Stream
 import fs2.data.csv.CsvException
 import fs2.data.csv.CsvRowDecoder
@@ -13,10 +17,19 @@ import fs2.data.csv.generic.semiauto._
 import io.circe.Encoder
 import io.circe.generic.semiauto._
 import io.circe.syntax._
+import org.http4s.HttpRoutes
 import org.http4s.Request
+import org.http4s.Response
+import org.http4s.Status
 import org.http4s.Uri
+import org.http4s.circe._
 import org.http4s.client.Client
+import org.http4s.dsl.Http4sDsl
+import org.http4s.dsl.impl.OptionalMultiQueryParamDecoderMatcher
+import org.http4s.dsl.impl.QueryParamDecoderMatcher
 import org.http4s.ember.client.EmberClientBuilder
+import org.http4s.ember.server.EmberServerBuilder
+import org.http4s.server.middleware.Logger
 
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -70,6 +83,20 @@ object SpeechStats {
   val securitySubject = "Innere Sicherheit"
   val initial: SpeechStats =
     SpeechStats(speechesIn2013 = 0, speechesOnSecurity = 0, wordsTotal = 0)
+  def merge(
+      stats1: Map[String, SpeechStats],
+      stats2: Map[String, SpeechStats]
+  ): Map[String, SpeechStats] =
+    stats1 ++ stats2.map((name, stats) =>
+      (
+        name,
+        stats1.get(name) match {
+          case None     => stats
+          case Some(st) => stats.combine(st)
+        }
+      )
+    )
+
 }
 case class EvaluationHelper(
     mostSpeeches2013: (Option[String], Int),
@@ -178,34 +205,49 @@ class Downloader(client: Client[IO]) extends GenericDownloader {
     )
 }
 
-object Main extends IOApp {
+object Server {
   given Encoder[Evaluation] = deriveEncoder
-  def merge(
-      stats1: Map[String, SpeechStats],
-      stats2: Map[String, SpeechStats]
-  ): Map[String, SpeechStats] =
-    stats1 ++ stats2.map((name, stats) =>
-      (
-        name,
-        stats1.get(name) match {
-          case None     => stats
-          case Some(st) => stats.combine(st)
-        }
-      )
-    )
-  override def run(args: List[String]): IO[ExitCode] = for {
-    stats <- EmberClientBuilder
+  val dsl = new Http4sDsl[IO] {}
+  import dsl._
+  object URLsMatcher
+      extends OptionalMultiQueryParamDecoderMatcher[String]("url")
+  def routes(
+      downloader: Downloader
+  ): PartialFunction[Request[IO], IO[Response[IO]]] = {
+    case GET -> Root / "evaluation" :? URLsMatcher(vurls) =>
+      vurls match {
+        case Invalid(e) => IO(Response(Status.BadRequest))
+        case Valid(urls) =>
+          for {
+            stats <- Stream
+              .emits(urls)
+              .flatMap(downloader.handleUrl)
+              .compile
+              .fold(Map.empty)(SpeechStats.merge)
+            result = Evaluation.fromStats(stats).asJson
+            response <- Status.Ok(result)
+          } yield response
+      }
+  }
+  def run: IO[Nothing] =
+    EmberClientBuilder
       .default[IO]
       .withTimeout(30.seconds)
       .build
-      .use { client =>
-        val downloader = new Downloader(client)
-        Stream
-          .emits(args)
-          .flatMap(downloader.handleUrl)
-          .compile
-          .fold(Map.empty)(merge)
-      }
-    _ <- IO.println(Evaluation.fromStats(stats).asJson)
-  } yield ExitCode.Success
+      .use(client =>
+        EmberServerBuilder
+          .default[IO]
+          .withHost(Host.fromString("0.0.0.0").get)
+          .withPort(Port.fromInt(8080).get)
+          .withHttpApp(
+            HttpRoutes.of[IO](routes(new Downloader(client))).orNotFound
+          )
+          .build
+          .useForever
+      )
+}
+
+object Main extends IOApp {
+  override def run(args: List[String]): IO[ExitCode] =
+    Server.run &> IO(ExitCode.Success)
 }
