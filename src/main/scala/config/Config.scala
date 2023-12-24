@@ -7,14 +7,27 @@ import pureconfig.module.http4s._
 
 import scala.concurrent.duration.Duration
 
+/** SSL configuration
+  *
+  * @param keyStore
+  *   resource file, p12
+  * @param keyStorePassword
+  *   password for that keyStore
+  */
+case class TLSConfig(keyStore: String, keyStorePassword: String)
+    derives ConfigReader
+
 /** Configuration for the HTTP server
   *
   * @param host
   *   host to bind the server to
   * @param port
   *   port to listen at
+  * @param tls
+  *   key store parameters for HTTPS
   */
-case class ServerConfig(host: Uri.Host, port: Int) derives ConfigReader
+case class ServerConfig(host: Uri.Host, port: Int, tls: Option[TLSConfig])
+    derives ConfigReader
 
 /** Configuration for the HTTP client
   *
@@ -35,5 +48,5 @@ case class ClientConfig(
   * @param client
   *   conviguration for the HTTP client
   */
-case class Http4sConfig(server: ServerConfig, client: ClientConfig)
+case class Http4sConfig(server: List[ServerConfig], client: ClientConfig)
     derives ConfigReader

@@ -28,6 +28,8 @@ trait GenericDownloader {
     *   text stream
     */
   def getContent(url: String): Stream[IO, String]
+  def update(stats: SpeechStats, speech: Speech): SpeechStats =
+    stats.update(speech)
 
   given ParseableHeader[String] = ParseableHeader.instance(_.trim().asRight)
 
@@ -69,9 +71,10 @@ trait GenericDownloader {
       .fold[Map[String, SpeechStats]](Map.empty)((allStats, speech) =>
         allStats.updated(
           speech.politician,
-          allStats
-            .getOrElse(speech.politician, Monoid[SpeechStats].empty)
-            .update(speech)
+          update(
+            allStats.getOrElse(speech.politician, Monoid[SpeechStats].empty),
+            speech
+          )
         )
       )
       .map(SpeechStatsMap(_))

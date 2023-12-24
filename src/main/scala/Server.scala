@@ -2,11 +2,16 @@ import cats.data.Validated.Invalid
 import cats.data.Validated.Valid
 import cats.effect.IO
 import cats.effect.kernel.Resource
+import cats.syntax.option.catsSyntaxOptionId
+import cats.syntax.traverse.toTraverseOps
 import com.comcast.ip4s.Port
 import config.Http4sConfig
+import config.ServerConfig
+import fs2.io.net.Network
 import logic.Combiner
 import logic.Downloader
 import org.http4s.EntityEncoder.stringEncoder
+import org.http4s.HttpApp
 import org.http4s.HttpRoutes
 import org.http4s.Request
 import org.http4s.Response
@@ -27,7 +32,7 @@ object Server {
   object URLsMatcher
       extends OptionalMultiQueryParamDecoderMatcher[String]("url")
 
-  /** Server API
+  /** Known routes
     *
     * @param combiner
     *   business logic, processing URLs
@@ -49,6 +54,14 @@ object Server {
       }
   }
 
+  /** Server API
+    *
+    * @param combiner
+    *   business logic, processing URLs
+    */
+  def httpApp(combiner: Combiner): HttpApp[IO] =
+    HttpRoutes.of(routes(combiner)).orNotFound
+
   /** Start the server
     *
     * @param http4sConfig
@@ -57,22 +70,33 @@ object Server {
     *   server resource
     */
   def run(http4sConfig: Http4sConfig): Resource[IO, Unit] = {
-    val serverConfig = http4sConfig.server
+    val serverConfigs = http4sConfig.server
     val clientConfig = http4sConfig.client
     val clientBuilder = EmberClientBuilder
       .default[IO]
       .withOpt(clientConfig.timeout, _.withTimeout(_))
       .withOpt(clientConfig.idleConnectionTime, _.withIdleConnectionTime(_))
-    val serverBuilder = EmberServerBuilder
-      .default[IO]
-      .withHost(serverConfig.host.toIpAddress.get)
-      .withPort(Port.fromInt(serverConfig.port).get)
+    def serverBuilder(config: ServerConfig) = Resource
+      .eval(
+        config.tls.traverse { tls =>
+          val tlsPassword = tls.keyStorePassword.toCharArray()
+          Network[IO].tlsContext
+            .fromKeyStoreResource(tls.keyStore, tlsPassword, tlsPassword)
+        }
+      )
+      .map(tlsContext =>
+        EmberServerBuilder
+          .default[IO]
+          .withHost(config.host.toIpAddress.get)
+          .withPort(Port.fromInt(config.port).get)
+          .withOpt(tlsContext, _.withTLS(_))
+      )
     for {
       client <- clientBuilder.build
       combiner = new Combiner(new Downloader(client))
-      _ <- serverBuilder
-        .withHttpApp(HttpRoutes.of(routes(combiner)).orNotFound)
-        .build
+      _ <- serverConfigs.traverse(
+        serverBuilder(_).flatMap(_.withHttpApp(httpApp(combiner)).build)
+      )
     } yield ()
   }
 }
