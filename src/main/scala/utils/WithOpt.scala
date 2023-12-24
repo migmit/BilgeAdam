@@ -1,7 +1,7 @@
 package utils
 
 object WithOpt {
-  extension [O, F](obj: O)
+  extension [O](obj: O)
     /** Utility function, optionally setting one field
       *
       * @param optValue
@@ -11,6 +11,6 @@ object WithOpt {
       * @return
       *   same object, if `optValue` is `None`, or the updated object otherwise
       */
-    def withOpt(optValue: Option[F], setField: (O, F) => O): O =
+    def withOpt[F](optValue: Option[F], setField: (O, F) => O): O =
       optValue.map(setField(obj, _)).getOrElse(obj)
 }

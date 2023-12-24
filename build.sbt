@@ -22,6 +22,7 @@ lazy val root = project
     scalaVersion := scala3Version,
     libraryDependencies ++= Seq(
       "org.scalameta" %% "munit" % "0.7.29" % Test,
+      "org.typelevel" %% "munit-cats-effect" % "2.0.0-M4" % Test,
       "ch.qos.logback" % "logback-classic" % "1.3.0"
     ) ++ http4sDeps ++ fs2DataDeps ++ circeDeps ++ pureconfigDeps,
     run / fork := true,

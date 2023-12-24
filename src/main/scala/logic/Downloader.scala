@@ -13,10 +13,17 @@ import org.http4s.client.Client
   *   HTTP client for resolving URLs
   */
 class Downloader(client: Client[IO]) extends GenericDownloader {
-  def getContent(url: String): Stream[IO, String] = client
-    .stream(Request(uri = Uri.fromString(url).toOption.get))
-    .flatMap(response =>
-      if (response.status.isSuccess) response.bodyText
-      else Stream.raiseError[IO](new DownloadException)
-    )
+  def getContent(url: String): Stream[IO, String] =
+    Uri
+      .fromString(url)
+      .toOption
+      .map(uri =>
+        client
+          .stream(Request(uri = uri))
+          .flatMap(response =>
+            if (response.status.isSuccess) response.bodyText
+            else Stream.raiseError[IO](new DownloadException)
+          )
+      )
+      .getOrElse(Stream.raiseError(new DownloadException))
 }

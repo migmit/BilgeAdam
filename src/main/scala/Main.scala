@@ -1,7 +1,10 @@
 import cats.effect.ExitCode
 import cats.effect.IO
 import cats.effect.IOApp
+import cats.syntax.traverse.toTraverseOps
 import config.Http4sConfig
+import logic.Combiner
+import logic.Downloader
 import pureconfig.ConfigSource
 
 /** Main object */
@@ -16,6 +19,12 @@ object Main extends IOApp {
   override def run(args: List[String]): IO[ExitCode] = {
     val config = ConfigSource.default
     val http4sConfig = config.at("http4s").loadOrThrow[Http4sConfig]
-    Server.run(http4sConfig).use(_ => IO.readLine) >> IO(ExitCode.Success)
+    val mainResource = for {
+      client <- HttpClient.createClient(http4sConfig.client)
+      logic = new Combiner(new Downloader(client))
+      server = HttpServer(logic)
+      servers <- http4sConfig.server.traverse(server.run)
+    } yield ()
+    mainResource.use(_ => IO.readLine).map(_ => ExitCode.Success)
   }
 }
