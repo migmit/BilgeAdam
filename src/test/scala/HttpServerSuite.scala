@@ -4,8 +4,9 @@ import config.ServerConfig
 import config.TLSConfig
 import io.circe.Json
 import io.circe.parser.parse
-import logic.Combiner
-import logic.Downloader
+import logic.BusinessLogic
+import logic.CsvDownloader
+import logic.SpeechLogic
 import logic.testData
 import org.http4s.Request
 import org.http4s.Uri
@@ -20,7 +21,9 @@ class ServerSuite extends munit.CatsEffectSuite {
   val dsl = new Http4sDsl[IO] {}
   import dsl._
 
-  val testServer = HttpServer(new Combiner(new Downloader(testData.client)))
+  val testServer = HttpServer(
+    new BusinessLogic(new SpeechLogic(), new CsvDownloader(testData.client))
+  )
 
   test("Http app should resolve URLs properly") {
     assertIO(

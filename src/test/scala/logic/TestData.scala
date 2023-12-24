@@ -2,18 +2,26 @@ package logic
 
 import cats.effect.IO
 import cats.effect.kernel.Resource
+import cats.syntax.either.catsSyntaxEitherId
 import fs2.Stream
+import fs2.data.csv.ParseableHeader
+import fs2.data.csv.decodeUsingHeaders
 import io.circe.parser.parse
 import models.Evaluation
+import models.Speech
 import models.SpeechStats
 import models.SpeechStatsMap
 import org.http4s.Status
 import org.http4s.client.Client
 import org.http4s.dsl.Http4sDsl
 
+import java.time.LocalDate
+
 object testData {
-  class TestDownloader extends GenericDownloader {
-    override def getContent(url: String): Stream[IO, String] = Stream.emit(url)
+  class TestDownloader extends Downloader[String, Speech] {
+    given ParseableHeader[String] = ParseableHeader.instance(_.trim().asRight)
+    override def getContent(url: String): Stream[IO, Speech] =
+      Stream.emit(url).through[IO, Speech](decodeUsingHeaders())
   }
 
   val csv = """Redner, Thema, Datum, Wörter
@@ -41,6 +49,34 @@ object testData {
       )
     )
   )
+
+  val statsList: List[Speech] =
+    List(
+      Speech(
+        politician = "Wolfgang Amadeus Mozart",
+        subject = "Innere Sicherheit",
+        date = LocalDate.of(2013, 5, 9),
+        wordCount = 758
+      ),
+      Speech(
+        politician = "Georges Bizet",
+        subject = "Innere Sicherheit",
+        date = LocalDate.of(2012, 6, 12),
+        wordCount = 959
+      ),
+      Speech(
+        politician = "Pyotr Ilyich Tchaikovsky",
+        subject = "Love and Thunder",
+        date = LocalDate.of(2017, 9, 1),
+        wordCount = 89
+      ),
+      Speech(
+        politician = "Georges Bizet",
+        subject = "Innere Sicherheit",
+        date = LocalDate.of(2013, 10, 2),
+        wordCount = 715
+      )
+    )
 
   val csv2 = """Redner, Thema, Datum, Wörter
   |Wolfgang Amadeus Mozart, Civil War, 2013-02-24, 551

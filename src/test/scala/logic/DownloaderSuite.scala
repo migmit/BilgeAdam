@@ -1,14 +1,21 @@
 package logic
 
 class DownloaderSuite extends munit.CatsEffectSuite {
-  val downloader = new Downloader(testData.client)
+  val downloader = new CsvDownloader(testData.client)
   test("Downloader should work") {
-    assertIO(downloader.handleUrl("http://1"), testData.statsMap)
+    assertIO(
+      downloader.getContent("http://1").compile.toList,
+      testData.statsList
+    )
   }
   test("Downloader should handle invalid URLs gracefully") {
-    assertIOBoolean(downloader.handleUrl(":").attempt.map(_.isLeft))
+    assertIOBoolean(
+      downloader.getContent(":").compile.toList.attempt.map(_.isLeft)
+    )
   }
   test("Downloader should fail gracefully if the URL is unresolvable") {
-    assertIOBoolean(downloader.handleUrl("http://3").attempt.map(_.isLeft))
+    assertIOBoolean(
+      downloader.getContent("http://3").compile.toList.attempt.map(_.isLeft)
+    )
   }
 }
