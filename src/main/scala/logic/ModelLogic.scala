@@ -7,9 +7,39 @@ import models.Speech
 import models.SpeechStats
 import models.SpeechStatsMap
 
+/** Various ways to combine and process the data
+  */
 trait ModelLogic[Url, Item, Stats, Result] {
+
+  /** The state in the beginning of the processing
+    *
+    * @param url
+    *   URL of the new stream
+    * @return
+    *   empty stats
+    */
   def emptyStats(url: Url): IO[Stats]
+
+  /** Append one more item to the stats
+    *
+    * @param url
+    *   URL of the stream
+    * @param stats
+    *   stats before appending
+    * @param item
+    *   new item
+    * @return
+    *   updated stats
+    */
   def updateStats(url: Url, stats: Stats, item: Item): IO[Stats]
+
+  /** Produce the final result
+    *
+    * @param stats
+    *   collected data after the stream is finished
+    * @returns
+    *   final result
+    */
   def finalizeStats(stats: Stats): IO[Result]
 }
 

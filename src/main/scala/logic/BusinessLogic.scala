@@ -16,19 +16,19 @@ import java.time.format.DateTimeParseException
   * `downloader`, then combine those data.
   *
   * @param downloader
-  *   specific way to resolve URLs and collect the data
+  *   specific way to resolve URLs
   */
 class BusinessLogic[Url, Item, Stats, Result](
     logic: ModelLogic[Url, Item, Stats, Result],
     downloader: Downloader[Url, Item]
 )(using CsvRowDecoder[Item, String], Monoid[Stats]) {
 
-  /** Resolve a URL, parse CSV and collect data on politicians
+  /** Resolve a URL, parse everything and collect data
     *
     * @param url
     *   URL to resolve
     * @return
-    *   collected data on each politician
+    *   collected data
     */
   def handleUrl(url: Url)(using CsvRowDecoder[Item, String]): IO[Stats] =
     for {

@@ -1,19 +1,19 @@
 package logic
 
 import cats.effect.IO
+import cats.syntax.either.catsSyntaxEitherId
 import exceptions.DownloadException
 import fs2.Stream
+import fs2.data.csv.ParseableHeader
 import fs2.data.csv.decodeUsingHeaders
 import models.Speech
 import org.http4s.Request
 import org.http4s.Uri
 import org.http4s.client.Client
-import fs2.data.csv.ParseableHeader
-import cats.syntax.either.catsSyntaxEitherId
 
 trait Downloader[Url, Item] {
 
-  /** Resolve a URL, producing the text stream
+  /** Resolve a URL, producing the stream of items
     *
     * @param url
     *   URL to resolve

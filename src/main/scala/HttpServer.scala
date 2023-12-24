@@ -6,6 +6,9 @@ import com.comcast.ip4s.Port
 import config.ServerConfig
 import fs2.io.net.Network
 import logic.BusinessLogic
+import models.Evaluation
+import models.Speech
+import models.SpeechStatsMap
 import org.http4s.EntityEncoder.stringEncoder
 import org.http4s.HttpApp
 import org.http4s.HttpRoutes
@@ -16,9 +19,6 @@ import org.http4s.circe.CirceEntityEncoder.circeEntityEncoder
 import org.http4s.dsl.Http4sDsl
 import org.http4s.ember.server.EmberServerBuilder
 import org.http4s.server.Server
-import models.Speech
-import models.SpeechStatsMap
-import models.Evaluation
 
 /** HTTP server
   *
