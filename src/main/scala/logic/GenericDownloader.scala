@@ -9,7 +9,6 @@ import fs2.data.csv.CsvException
 import fs2.data.csv.ParseableHeader
 import fs2.data.csv.decodeUsingHeaders
 import models.Speech
-import models.SpeechRep
 import models.SpeechStats
 import models.SpeechStatsMap
 
@@ -54,8 +53,7 @@ trait GenericDownloader {
     */
   def handleUrl(url: String): IO[SpeechStatsMap] =
     getContent(url)
-      .through(decodeUsingHeaders[SpeechRep]())
-      .map(Speech.fromRep)
+      .through(decodeUsingHeaders[Speech]())
       .handleErrorWith(_ match {
         case (e: DownloadException) =>
           Stream.raiseError[IO](

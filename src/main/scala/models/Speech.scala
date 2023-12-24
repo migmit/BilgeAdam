@@ -46,6 +46,9 @@ final case class Speech(
     wordCount: Int
 )
 object Speech {
+  given CsvRowDecoder[Speech, String] =
+    CsvRowDecoder[SpeechRep, String].map(Speech.fromRep)
+
   val formatter = DateTimeFormatter.ISO_LOCAL_DATE
 
   /** Convert CSV representation to the natural one, trimming all lines
