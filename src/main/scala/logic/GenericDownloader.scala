@@ -28,8 +28,18 @@ trait GenericDownloader {
     *   text stream
     */
   def getContent(url: String): Stream[IO, String]
-  def update(stats: SpeechStats, speech: Speech): SpeechStats =
-    stats.update(speech)
+
+  /** Method to update stats, can be overwritten
+    *
+    * @param stats
+    *   existing stats
+    * @param speech
+    *   new speach' data
+    * @return
+    *   updated stats
+    */
+  def update(stats: SpeechStats, speech: Speech): IO[SpeechStats] =
+    IO(stats.update(speech))
 
   given ParseableHeader[String] = ParseableHeader.instance(_.trim().asRight)
 
@@ -67,15 +77,13 @@ trait GenericDownloader {
             new Exception(s"Unexpected error ($url): ${e.getMessage()}")
           )
       })
-      .compile
-      .fold[Map[String, SpeechStats]](Map.empty)((allStats, speech) =>
-        allStats.updated(
-          speech.politician,
-          update(
-            allStats.getOrElse(speech.politician, Monoid[SpeechStats].empty),
-            speech
-          )
-        )
+      .evalScan[IO, Map[String, SpeechStats]](Map.empty)((allStats, speech) =>
+        update(
+          allStats.getOrElse(speech.politician, Monoid[SpeechStats].empty),
+          speech
+        ).map(allStats.updated(speech.politician, _))
       )
+      .compile
+      .lastOrError
       .map(SpeechStatsMap(_))
 }
