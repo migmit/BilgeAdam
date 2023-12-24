@@ -31,6 +31,8 @@ trait GenericDownloader {
 
   /** Method to update stats, can be overwritten
     *
+    * @param url
+    *   current download url, usually ignored
     * @param stats
     *   existing stats
     * @param speech
@@ -38,7 +40,7 @@ trait GenericDownloader {
     * @return
     *   updated stats
     */
-  def update(stats: SpeechStats, speech: Speech): IO[SpeechStats] =
+  def update(url: String, stats: SpeechStats, speech: Speech): IO[SpeechStats] =
     IO(stats.update(speech))
 
   given ParseableHeader[String] = ParseableHeader.instance(_.trim().asRight)
@@ -79,6 +81,7 @@ trait GenericDownloader {
       })
       .evalScan[IO, Map[String, SpeechStats]](Map.empty)((allStats, speech) =>
         update(
+          url,
           allStats.getOrElse(speech.politician, Monoid[SpeechStats].empty),
           speech
         ).map(allStats.updated(speech.politician, _))

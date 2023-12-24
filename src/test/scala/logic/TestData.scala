@@ -1,15 +1,15 @@
 package logic
 
 import cats.effect.IO
+import cats.effect.kernel.Resource
 import fs2.Stream
 import io.circe.parser.parse
 import models.Evaluation
 import models.SpeechStats
 import models.SpeechStatsMap
-import org.http4s.dsl.Http4sDsl
-import org.http4s.client.Client
-import cats.effect.kernel.Resource
 import org.http4s.Status
+import org.http4s.client.Client
+import org.http4s.dsl.Http4sDsl
 
 object testData {
   class TestDownloader extends GenericDownloader {
