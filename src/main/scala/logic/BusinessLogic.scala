@@ -4,7 +4,7 @@ import cats.effect.IO
 import cats.kernel.Monoid
 import cats.syntax.either.catsSyntaxEitherId
 import cats.syntax.parallel.catsSyntaxParallelFoldMapA
-import exceptions.DownloadException
+import exceptions.URLException
 import fs2.Stream
 import fs2.data.csv.CsvException
 import fs2.data.csv.CsvRowDecoder
@@ -35,29 +35,9 @@ class BusinessLogic[Url, Item, Stats, Result](
       initial <- logic.emptyStats(url)
       result <- downloader
         .getContent(url)
-        .handleErrorWith(_ match {
-          case (e: DownloadException) =>
-            Stream.raiseError[IO](
-              new Exception(s"Download error ($url): ${e.getMessage()}")
-            )
-          case (e: CsvException) =>
-            Stream
-              .raiseError[IO](
-                new Exception(s"Decode error ($url): ${e.getMessage()}")
-              )
-          case (e: NumberFormatException) =>
-            Stream.raiseError[IO](
-              new Exception(s"Number parsing error ($url): ${e.getMessage()}")
-            )
-          case (e: DateTimeParseException) =>
-            Stream.raiseError[IO](
-              new Exception(s"Date parsing error ($url): ${e.getMessage()}")
-            )
-          case e =>
-            Stream.raiseError[IO](
-              new Exception(s"Unexpected error ($url): ${e.getMessage()}")
-            )
-        })
+        .handleErrorWith(error =>
+          Stream.raiseError[IO](new URLException(url, error))
+        )
         .evalScan[IO, Stats](initial)((allStats, speech) =>
           logic.updateStats(url, allStats, speech)
         )

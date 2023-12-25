@@ -1,4 +1,4 @@
 package exceptions
 
 /** Failed download */
-class DownloadException extends Exception
+class DownloadException(message: String) extends Exception(message)

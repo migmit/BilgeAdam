@@ -28,7 +28,7 @@ object parallelData {
   ): Stream[IO, String] = {
     given ParseableHeader[String] = ParseableHeader.instance(_.trim().asRight)
     val decoder = CsvRowDecoder[SpeechRep, String]
-    given encoder: CsvRowEncoder[SpeechRep, String] = deriveCsvRowEncoder
+    given CsvRowEncoder[SpeechRep, String] = deriveCsvRowEncoder
     val records = Stream
       .emit(csv)
       .through[IO, SpeechRep](decodeUsingHeaders())

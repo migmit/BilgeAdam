@@ -43,8 +43,13 @@ class CsvDownloader(client: Client[IO]) extends Downloader[String, Speech] {
               // && response.contentType.exists(_.mediaType.satisfies(MediaType.text.csv))
           )
             response.bodyText.through(decodeUsingHeaders[Speech]())
-          else Stream.raiseError[IO](new DownloadException)
+          else
+            Stream.raiseError[IO](
+              new DownloadException(
+                s"URL unresolvable, returned ${response.status.code}"
+              )
+            )
         )
     )
-    .getOrElse(Stream.raiseError(new DownloadException))
+    .getOrElse(Stream.raiseError(new DownloadException("Invalid URL")))
 }
