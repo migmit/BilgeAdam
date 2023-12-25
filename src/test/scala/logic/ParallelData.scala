@@ -49,7 +49,7 @@ object parallelData {
       Resource.eval(req.uri.host.map(_.value) match {
         case Some("1") => Status.Ok(csvToStream(testData.csv, def1._2, def1._1))
         case Some("2") =>
-          Status.Ok(csvToStream(testData.csv2, def1._2, def2._1))
+          Status.Ok(csvToStream(testData.csv2, def2._2, def2._1))
         case _ => Status.BadRequest()
       })
     )
