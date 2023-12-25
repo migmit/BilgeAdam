@@ -24,6 +24,8 @@ The application should provide an HTTP endpoint which accepts one or more given 
 - Which politician gave the most speeches on the topic "Innere Sicherheit"?
 - Which politician used the fewest words?
 
+**Note: there is no indication if the same speech can be in separate `CSV` files, and how to identify those occasions, if they exist. Therefore, the application treats all those speeches as different.**
+
 The answers should be provided as `JSON`. If a question cannot be answered or does not have an unambiguous solution the result for this field should be `null`. As an example for the given input above the expected result is:
 
 ```
@@ -57,6 +59,8 @@ Plain `HTTP` works as well:
 ```
 curl 'http://localhost:8080/evaluation?url=https://fid-recruiting.s3-eu-west-1.amazonaws.com/politics.csv'
 ```
+
+There was no requirement to support HTTPS, but it was fun to do.
 
 If any of the URLs provided in the query are invalid or can't be resolved or do not resolve to a `CSV` file, the application reports an error and does not output the result of processing the rest. This is deliberate: otherwise the user might accidentally get incorrect result and not realise that in time.
 
