@@ -64,4 +64,6 @@ There was no requirement to support HTTPS, but it was fun to do.
 
 If any of the URLs provided in the query are invalid or can't be resolved or do not resolve to a `CSV` file, the application reports an error and does not output the result of processing the rest. This is deliberate: otherwise the user might accidentally get incorrect result and not realise that in time.
 
+It's also possible that `CSV` files would be served with a wrong `Content-Type`, so the application does not check for it being `text/csv`, but rather examines the content.
+
 The application can be stopped by hitting `return` in the terminal where it runs.

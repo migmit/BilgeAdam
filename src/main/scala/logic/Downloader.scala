@@ -7,6 +7,7 @@ import fs2.Stream
 import fs2.data.csv.ParseableHeader
 import fs2.data.csv.decodeUsingHeaders
 import models.Speech
+import org.http4s.MediaType
 import org.http4s.Request
 import org.http4s.Uri
 import org.http4s.client.Client
@@ -37,7 +38,10 @@ class CsvDownloader(client: Client[IO]) extends Downloader[String, Speech] {
       client
         .stream(Request(uri = uri))
         .flatMap(response =>
-          if (response.status.isSuccess)
+          if (
+            response.status.isSuccess
+              // && response.contentType.exists(_.mediaType.satisfies(MediaType.text.csv))
+          )
             response.bodyText.through(decodeUsingHeaders[Speech]())
           else Stream.raiseError[IO](new DownloadException)
         )
