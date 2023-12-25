@@ -23,9 +23,9 @@ object parallelData {
 
   def csvToStream(
       csv: String,
-      count: Int,
-      deferred: Deferred[IO, Unit]
+      deferred: (Deferred[IO, Unit], Int)
   ): Stream[IO, String] = {
+    val count = deferred._2
     given ParseableHeader[String] = ParseableHeader.instance(_.trim().asRight)
     val decoder = CsvRowDecoder[SpeechRep, String]
     given CsvRowEncoder[SpeechRep, String] = deriveCsvRowEncoder
@@ -39,7 +39,7 @@ object parallelData {
       .eval(records)
       .flatMap(recs =>
         Stream.emits(recs.take(count)) ++ Stream.evals(
-          deferred.get >> IO(recs.drop(count))
+          deferred._1.get >> IO(recs.drop(count))
         )
       )
   }
@@ -47,10 +47,9 @@ object parallelData {
   def client(def1: (Deferred[IO, Unit], Int), def2: (Deferred[IO, Unit], Int)) =
     Client[IO](req =>
       Resource.eval(req.uri.host.map(_.value) match {
-        case Some("1") => Status.Ok(csvToStream(testData.csv, def1._2, def1._1))
-        case Some("2") =>
-          Status.Ok(csvToStream(testData.csv2, def2._2, def2._1))
-        case _ => Status.BadRequest()
+        case Some("1") => Status.Ok(csvToStream(testData.csv, def1))
+        case Some("2") => Status.Ok(csvToStream(testData.csv2, def2))
+        case _         => Status.BadRequest()
       })
     )
 
